@@ -1,14 +1,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!-- Tema base de la app. La UI ahora se define con Jetpack Compose (Material 3). -->
     <style name="Base.Theme.FinanceTrack" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="android:windowBackground">#121212</item>
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:navigationBarColor">#1E1E1E</item>
     </style>
 
     <style name="Theme.FinanceTrack" parent="Base.Theme.FinanceTrack" />
-
-    <style name="PildoraDorada" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
-        <item name="android:color">#FBC02D</item>
-    </style>
-
 </resources>

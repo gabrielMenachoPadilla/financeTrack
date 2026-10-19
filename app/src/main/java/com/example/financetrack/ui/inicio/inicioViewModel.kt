@@ -2,32 +2,34 @@ package com.example.financetrack.ui.inicio
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
+import com.example.financetrack.R
 import com.example.financetrack.data.local.FinanceTrackDbHelper
 import com.example.financetrack.data.model.CategoriaDesglose
 import com.example.financetrack.data.model.Transaction
 import com.example.financetrack.data.repository.TransactionRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class InicioViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = TransactionRepository(FinanceTrackDbHelper(application))
 
-    private val _saldoDisponible = MutableLiveData<Double>()
-    val saldoDisponible: LiveData<Double> = _saldoDisponible
+    private val _saldoDisponible = MutableStateFlow(0.0)
+    val saldoDisponible: StateFlow<Double> = _saldoDisponible.asStateFlow()
 
-    private val _totalIngresos = MutableLiveData<Double>()
-    val totalIngresos: LiveData<Double> = _totalIngresos
+    private val _totalIngresos = MutableStateFlow(0.0)
+    val totalIngresos: StateFlow<Double> = _totalIngresos.asStateFlow()
 
-    private val _totalGastos = MutableLiveData<Double>()
-    val totalGastos: LiveData<Double> = _totalGastos
+    private val _totalGastos = MutableStateFlow(0.0)
+    val totalGastos: StateFlow<Double> = _totalGastos.asStateFlow()
 
-    // LiveData para los datos del gráfico
-    private val _datosGrafico = MutableLiveData<List<CategoriaDesglose>>()
-    val datosGrafico: LiveData<List<CategoriaDesglose>> = _datosGrafico
+    // Datos para el gráfico
+    private val _datosGrafico = MutableStateFlow<List<CategoriaDesglose>>(emptyList())
+    val datosGrafico: StateFlow<List<CategoriaDesglose>> = _datosGrafico.asStateFlow()
 
-    // LiveData para las transacciones recientes (Faltaba declararlo en tu código)
-    private val _transaccionesRecientes = MutableLiveData<List<Transaction>>()
-    val transaccionesRecientes: LiveData<List<Transaction>> = _transaccionesRecientes
+    // Transacciones recientes
+    private val _transaccionesRecientes = MutableStateFlow<List<Transaction>>(emptyList())
+    val transaccionesRecientes: StateFlow<List<Transaction>> = _transaccionesRecientes.asStateFlow()
 
     fun cargarResumen() {
         val todasLasTransacciones = repository.getAllTransactions()
@@ -38,9 +40,9 @@ class InicioViewModel(application: Application) : AndroidViewModel(application) 
 
         _totalIngresos.value = ingresos
         _totalGastos.value = gastos
-        _saldoDisponible.value = ingresos - gastos
+        _saldoDisponible.value = calculadoraFinanzas.calcularSaldoDeTransacciones(todasLasTransacciones)
 
-// 1. Preparar datos para el Gráfico Circular (Ingresos vs Gastos)
+        // 1. Preparar datos para el Gráfico Circular (Ingresos vs Gastos)
         val listaDesglose = mutableListOf<CategoriaDesglose>()
 
         if (ingresos > 0) {
@@ -51,7 +53,7 @@ class InicioViewModel(application: Application) : AndroidViewModel(application) 
         }
         _datosGrafico.value = listaDesglose
 
-// 2. Transacciones recientes con sus colores
+        // 2. Transacciones recientes con sus colores
         val recientes = todasLasTransacciones
             .sortedWith(compareByDescending<Transaction> { it.date }.thenByDescending { it.hora })
             .take(5)
@@ -59,7 +61,7 @@ class InicioViewModel(application: Application) : AndroidViewModel(application) 
                 val cat = categoriasMap[t.category]
                 t.copy(
                     colorCategory = cat?.color ?: "#888888",
-                    iconCategory = cat?.icono ?: android.R.drawable.ic_menu_agenda
+                    iconCategory = cat?.icono ?: R.drawable.ic_dinero
                 )
             }
         _transaccionesRecientes.value = recientes

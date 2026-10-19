@@ -2,26 +2,27 @@ package com.example.financetrack.ui.transacciones
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
+import com.example.financetrack.R
 import com.example.financetrack.data.local.FinanceTrackDbHelper
 import com.example.financetrack.data.model.Category
 import com.example.financetrack.data.model.CategoriaDesglose
 import com.example.financetrack.data.model.Transaction
 import com.example.financetrack.data.repository.TransactionRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.text.SimpleDateFormat
 import java.util.Calendar
-import java.util.Date
 import java.util.Locale
 
 class TransaccionesViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = TransactionRepository(FinanceTrackDbHelper(application))
 
-    private val _transaccionesFiltradas = MutableLiveData<List<Transaction>>()
-    val transaccionesFiltradas: LiveData<List<Transaction>> = _transaccionesFiltradas
+    private val _transaccionesFiltradas = MutableStateFlow<List<Transaction>>(emptyList())
+    val transaccionesFiltradas: StateFlow<List<Transaction>> = _transaccionesFiltradas.asStateFlow()
 
-    private val _datosGrafico = MutableLiveData<List<CategoriaDesglose>>()
-    val datosGrafico: LiveData<List<CategoriaDesglose>> = _datosGrafico
+    private val _datosGrafico = MutableStateFlow<List<CategoriaDesglose>>(emptyList())
+    val datosGrafico: StateFlow<List<CategoriaDesglose>> = _datosGrafico.asStateFlow()
 
     // Memoria para saber qué estamos viendo y poder recargar la misma pantalla
     private var filtroEsGastoActual = true
@@ -29,10 +30,32 @@ class TransaccionesViewModel(application: Application) : AndroidViewModel(applic
 
     // Variables para controlar la fecha actual que estamos viendo
     val fechaBase: Calendar = Calendar.getInstance()
-    private val _textoFecha = MutableLiveData<String>()
-    val textoFecha: LiveData<String> = _textoFecha
+    private val _textoFecha = MutableStateFlow("")
+    val textoFecha: StateFlow<String> = _textoFecha.asStateFlow()
 
-    private val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    private val formatosFecha = listOf(
+        "yyyy-MM-dd",
+        "dd/MM/yyyy",
+        "d/M/yyyy",
+        "dd-MM-yyyy",
+        "d-M-yyyy",
+        "yyyy/MM/dd",
+    )
+
+    /** Interpreta la fecha de una transacción probando varios formatos. Devuelve null si no se puede. */
+    private fun parseFecha(fecha: String): Calendar? {
+        for (formato in formatosFecha) {
+            try {
+                val date = SimpleDateFormat(formato, Locale.getDefault())
+                    .apply { isLenient = false }
+                    .parse(fecha)
+                if (date != null) return Calendar.getInstance().apply { time = date }
+            } catch (_: Exception) {
+                // Se prueba con el siguiente formato.
+            }
+        }
+        return null
+    }
 
     // Navegar en el tiempo
     fun cambiarFecha(offset: Int, periodo: String, esGasto: Boolean) {
@@ -53,11 +76,11 @@ class TransaccionesViewModel(application: Application) : AndroidViewModel(applic
 
     private fun actualizarTextoFecha(periodo: String) {
         val formato = when (periodo) {
-            "Día" -> SimpleDateFormat("dd 'de' MMMM, yyyy", Locale("es", "ES"))
-            "Semana" -> SimpleDateFormat("'Semana del' dd MMM", Locale("es", "ES"))
-            "Mes" -> SimpleDateFormat("MMMM yyyy", Locale("es", "ES"))
-            "Año" -> SimpleDateFormat("yyyy", Locale("es", "ES"))
-            else -> SimpleDateFormat("MMMM yyyy", Locale("es", "ES"))
+            "Día" -> SimpleDateFormat("dd 'de' MMMM, yyyy", Locale.forLanguageTag("es-ES"))
+            "Semana" -> SimpleDateFormat("'Semana del' dd MMM", Locale.forLanguageTag("es-ES"))
+            "Mes" -> SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("es-ES"))
+            "Año" -> SimpleDateFormat("yyyy", Locale.forLanguageTag("es-ES"))
+            else -> SimpleDateFormat("MMMM yyyy", Locale.forLanguageTag("es-ES"))
         }
         _textoFecha.value = formato.format(fechaBase.time).replaceFirstChar { it.uppercase() }
     }
@@ -79,8 +102,7 @@ class TransaccionesViewModel(application: Application) : AndroidViewModel(applic
         val filtradasPorTipo = todas.filter { it.type == tipoBusqueda }
 
         val filtradasPorTiempo = filtradasPorTipo.filter { transaccion ->
-            val fechaTransaccion = transaccion.date.let { sdf.parse(it) } ?: return@filter false
-            val calTransaccion = java.util.Calendar.getInstance().apply { time = fechaTransaccion }
+            val calTransaccion = parseFecha(transaccion.date) ?: return@filter false
 
             when (periodo) {
                 "Día" -> calTransaccion.get(java.util.Calendar.YEAR) == fechaBase.get(java.util.Calendar.YEAR) && calTransaccion.get(java.util.Calendar.DAY_OF_YEAR) == fechaBase.get(java.util.Calendar.DAY_OF_YEAR)
@@ -94,7 +116,7 @@ class TransaccionesViewModel(application: Application) : AndroidViewModel(applic
             val cat = categoriasMap[t.category]
             t.copy(
                 colorCategory = cat?.color ?: "#888888",
-                iconCategory = cat?.icono ?: android.R.drawable.ic_menu_agenda
+                iconCategory = cat?.icono ?: R.drawable.ic_dinero
             )
         }.sortedWith(compareByDescending<Transaction> { it.date }.thenByDescending { it.hora })
 

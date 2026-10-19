@@ -1,107 +1,93 @@
 package com.example.financetrack.data.local
 
-import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
-import com.example.financetrack.data.model.Transaction
+import com.example.financetrack.R
 
 class FinanceTrackDbHelper(context: Context) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
 
     companion object {
-        private const val DATABASE_VERSION = 1
+        // v1: transactions (sin "hora") — apps del MVP
+        // v2: agrega la columna "hora" y la tabla categories SIN borrar datos
+        private const val DATABASE_VERSION = 2
         private const val DATABASE_NAME = "FinanceTrack.db"
 
-        // Nombre de la tabla y columnas
+        // Nombre de las tablas y columnas
         const val TABLE_TRANSACTIONS = "transactions"
+        const val TABLE_CATEGORIES = "categories"
         const val COLUMN_ID = "id"
         const val COLUMN_AMOUNT = "amount"
         const val COLUMN_TYPE = "type"
         const val COLUMN_CATEGORY = "category"
         const val COLUMN_DATE = "date"
+        const val COLUMN_HORA = "hora"
         const val COLUMN_DESCRIPTION = "description"
-    }
 
-    override fun onCreate(db: SQLiteDatabase) {
-        // 1. La tabla que ya tenías para las transacciones
-        val createTransactionsTable = """
-            CREATE TABLE transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                amount REAL,
-                type TEXT,
-                category TEXT,
-                date TEXT,
-                hora TEXT,
-                description TEXT
+        private val CREATE_TRANSACTIONS = """
+            CREATE TABLE IF NOT EXISTS $TABLE_TRANSACTIONS (
+                $COLUMN_ID INTEGER PRIMARY KEY AUTOINCREMENT,
+                $COLUMN_AMOUNT REAL,
+                $COLUMN_TYPE TEXT,
+                $COLUMN_CATEGORY TEXT,
+                $COLUMN_DATE TEXT,
+                $COLUMN_HORA TEXT,
+                $COLUMN_DESCRIPTION TEXT
             )
         """.trimIndent()
-        db.execSQL(createTransactionsTable)
 
-// 2. LA NUEVA TABLA DE CATEGORÍAS (Actualizada con Color e Ícono)
-        val createCategoriesTable = """
-            CREATE TABLE categories (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+        private val CREATE_CATEGORIES = """
+            CREATE TABLE IF NOT EXISTS $TABLE_CATEGORIES (
+                $COLUMN_ID INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT,
                 tipo TEXT,
                 color TEXT,
                 icono INTEGER
             )
         """.trimIndent()
-        db.execSQL(createCategoriesTable)
+    }
 
-        // 3. Insertar categorías por defecto con colores e íconos nativos
-        val iconGasto = android.R.drawable.ic_menu_agenda
-        val iconIngreso = android.R.drawable.ic_menu_add
-
-        db.execSQL("INSERT INTO categories (nombre, tipo, color, icono) VALUES ('Alimentación', 'GASTO', '#F44336', $iconGasto)")
-        db.execSQL("INSERT INTO categories (nombre, tipo, color, icono) VALUES ('Transporte', 'GASTO', '#2196F3', $iconGasto)")
-        db.execSQL("INSERT INTO categories (nombre, tipo, color, icono) VALUES ('Salario', 'INGRESO', '#4CAF50', $iconIngreso)")
+    override fun onCreate(db: SQLiteDatabase) {
+        db.execSQL(CREATE_TRANSACTIONS)
+        db.execSQL(CREATE_CATEGORIES)
+        insertarCategoriasPorDefecto(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS $TABLE_TRANSACTIONS")
-        onCreate(db)
+        // Migración NO destructiva: se conservan las transacciones del usuario.
+        if (oldVersion < 2) {
+            // 1. Agrega "hora" si la tabla viene del esquema antiguo.
+            if (!columnaExiste(db, TABLE_TRANSACTIONS, COLUMN_HORA)) {
+                db.execSQL("ALTER TABLE $TABLE_TRANSACTIONS ADD COLUMN $COLUMN_HORA TEXT")
+            }
+            // 2. Crea la tabla de categorías si no existía.
+            db.execSQL(CREATE_CATEGORIES)
+            insertarCategoriasPorDefecto(db)
+        }
     }
 
-    // --- OPERACIONES CRUD BÁSICAS ---
-
-    // 1. Crear (Insertar) una nueva transacción
-    fun insertTransaction(transaction: Transaction): Long {
-        val db = this.writableDatabase
-        val values = ContentValues().apply {
-            put(COLUMN_AMOUNT, transaction.amount)
-            put(COLUMN_TYPE, transaction.type)
-            put(COLUMN_CATEGORY, transaction.category)
-            put(COLUMN_DATE, transaction.date)
-            put(COLUMN_DESCRIPTION, transaction.description)
+    private fun columnaExiste(db: SQLiteDatabase, tabla: String, columna: String): Boolean {
+        db.rawQuery("PRAGMA table_info($tabla)", null).use { cursor ->
+            val idxNombre = cursor.getColumnIndex("name")
+            while (cursor.moveToNext()) {
+                if (idxNombre >= 0 && cursor.getString(idxNombre) == columna) return true
+            }
         }
-        val success = db.insert(TABLE_TRANSACTIONS, null, values)
-        db.close()
-        return success // Retorna el ID de la fila insertada o -1 si hubo error
+        return false
     }
 
-    // 2. Leer (Obtener) todas las transacciones
-    fun getAllTransactions(): List<Transaction> {
-        val transactionList = ArrayList<Transaction>()
-        val selectQuery = "SELECT * FROM $TABLE_TRANSACTIONS ORDER BY $COLUMN_DATE DESC" // Las más recientes primero
-        val db = this.readableDatabase
-        val cursor = db.rawQuery(selectQuery, null)
-
-        if (cursor.moveToFirst()) {
-            do {
-                val transaction = Transaction(
-                    id = cursor.getInt(cursor.getColumnIndexOrThrow(COLUMN_ID)),
-                    amount = cursor.getDouble(cursor.getColumnIndexOrThrow(COLUMN_AMOUNT)),
-                    type = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_TYPE)),
-                    category = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_CATEGORY)),
-                    date = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_DATE)),
-                    description = cursor.getString(cursor.getColumnIndexOrThrow(COLUMN_DESCRIPTION))
-                )
-                transactionList.add(transaction)
-            } while (cursor.moveToNext())
+    private fun insertarCategoriasPorDefecto(db: SQLiteDatabase) {
+        // Solo inserta las categorías por defecto si la tabla está vacía.
+        db.rawQuery("SELECT COUNT(*) FROM $TABLE_CATEGORIES", null).use { cursor ->
+            if (cursor.moveToFirst() && cursor.getInt(0) > 0) return
         }
-        cursor.close()
-        db.close()
-        return transactionList
+
+        val iconAlimentacion = R.drawable.ic_dinero
+        val iconTransporte = R.drawable.ic_tren
+        val iconIngreso = R.drawable.ic_banco
+
+        db.execSQL("INSERT INTO $TABLE_CATEGORIES (nombre, tipo, color, icono) VALUES ('Alimentación', 'GASTO', '#F44336', $iconAlimentacion)")
+        db.execSQL("INSERT INTO $TABLE_CATEGORIES (nombre, tipo, color, icono) VALUES ('Transporte', 'GASTO', '#2196F3', $iconTransporte)")
+        db.execSQL("INSERT INTO $TABLE_CATEGORIES (nombre, tipo, color, icono) VALUES ('Salario', 'INGRESO', '#4CAF50', $iconIngreso)")
     }
 }

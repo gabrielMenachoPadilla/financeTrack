@@ -2,17 +2,18 @@ package com.example.financetrack.ui.categorias
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import com.example.financetrack.data.local.FinanceTrackDbHelper
 import com.example.financetrack.data.model.Category
 import com.example.financetrack.data.repository.TransactionRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class CategoriasViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = TransactionRepository(FinanceTrackDbHelper(application))
 
-    private val _categoriasVisibles = MutableLiveData<List<Category>>()
-    val categoriasVisibles: LiveData<List<Category>> = _categoriasVisibles
+    private val _categoriasVisibles = MutableStateFlow<List<Category>>(emptyList())
+    val categoriasVisibles: StateFlow<List<Category>> = _categoriasVisibles.asStateFlow()
 
     fun cargarCategorias(esGasto: Boolean) {
         val tipo = if (esGasto) "GASTO" else "INGRESO"
